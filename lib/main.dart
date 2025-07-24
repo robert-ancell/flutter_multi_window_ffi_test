@@ -33,6 +33,39 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
+class GtkWidget {
+  final Pointer pointer;
+
+  const GtkWidget(this.pointer);
+
+  @Native<Void Function(Pointer)>(symbol: 'gtk_widget_destroy')
+  external static void _gtkWindowDestroy(Pointer widget);
+  void destroy() {
+    _gtkWindowDestroy(pointer);
+  }
+}
+
+class GtkWindow extends GtkWidget {
+  const GtkWindow(super.pointer);
+
+  @Native<Void Function(Pointer)>(symbol: 'gtk_window_present')
+  external static void _gtkWindowPresent(Pointer window);
+  void present() {
+    _gtkWindowPresent(pointer);
+  }
+
+  @Native<Void Function(Pointer, Pointer<ffi.Utf8>)>(
+    symbol: 'gtk_window_set_title',
+  )
+  external static void _gtkWindowSetTitle(
+    Pointer window,
+    Pointer<ffi.Utf8> title,
+  );
+  void setTitle(String title) {
+    _gtkWindowSetTitle(pointer, title.toNativeUtf8());
+  }
+}
+
 @Native<Bool Function(Int64)>(symbol: 'InternalFlutterLinux_HasTopLevelWindows')
 external bool _hasTopLevelWindows(int engineId);
 
@@ -45,9 +78,6 @@ external int _createRegularWindow(int engineId);
   symbol: 'InternalFlutterLinux_GetGtkWindow',
 )
 external Pointer _getGtkWindow(int engineId, int viewId);
-
-@Native<Void Function(Pointer)>(symbol: 'gtk_window_present')
-external void _gtkWindowPresent(Pointer window);
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
@@ -73,8 +103,8 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: () {
                 var engineId = PlatformDispatcher.instance.engineId!;
                 var viewId = _createRegularWindow(engineId);
-                var window = _getGtkWindow(engineId, viewId);
-                _gtkWindowPresent(window);
+                var window = GtkWindow(_getGtkWindow(engineId, viewId));
+                //window.present();
               },
               child: Text('CreateWindow'),
             ),
