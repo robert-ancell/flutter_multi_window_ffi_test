@@ -38,6 +38,12 @@ class GtkWidget {
 
   const GtkWidget(this.pointer);
 
+  @Native<Void Function(Pointer)>(symbol: 'gtk_widget_show')
+  external static void _gtkWidgetShow(Pointer widget);
+  void show() {
+    _gtkWidgetShow(pointer);
+  }
+
   @Native<Void Function(Pointer)>(symbol: 'gtk_widget_destroy')
   external static void _gtkWindowDestroy(Pointer widget);
   void destroy() {
@@ -46,7 +52,16 @@ class GtkWidget {
 }
 
 class GtkWindow extends GtkWidget {
-  const GtkWindow(super.pointer);
+  @Native<Pointer Function(Int)>(symbol: 'gtk_window_new')
+  external static Pointer _gtkWindowNew(int type);
+
+  GtkWindow() : super(_gtkWindowNew(0));
+
+  @Native<Void Function(Pointer, Pointer)>(symbol: 'gtk_container_add')
+  external static void _gtkContainerAdd(Pointer container, Pointer child);
+  void add(GtkWidget child) {
+    _gtkContainerAdd(pointer, child.pointer);
+  }
 
   @Native<Void Function(Pointer)>(symbol: 'gtk_window_present')
   external static void _gtkWindowPresent(Pointer window);
@@ -127,18 +142,17 @@ class GtkWindow extends GtkWidget {
   }
 }
 
-@Native<Bool Function(Int64)>(symbol: 'InternalFlutterLinux_HasTopLevelWindows')
-external bool _hasTopLevelWindows(int engineId);
+class FlView extends GtkWidget {
+  @Native<Pointer Function(Pointer)>(symbol: 'fl_view_new_for_engine')
+  external static Pointer _flViewNewForEngine(Pointer engine);
 
-@Native<Int64 Function(Int64)>(
-  symbol: 'InternalFlutterLinux_CreateRegularWindow',
-)
-external int _createRegularWindow(int engineId);
-
-@Native<Pointer Function(Int64, Int64)>(
-  symbol: 'InternalFlutterLinux_GetGtkWindow',
-)
-external Pointer _getGtkWindow(int engineId, int viewId);
+  FlView()
+    : super(
+        _flViewNewForEngine(
+          Pointer.fromAddress(PlatformDispatcher.instance.engineId!),
+        ),
+      );
+}
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
@@ -162,9 +176,10 @@ class _MyHomePageState extends State<MyHomePage> {
           children: <Widget>[
             OutlinedButton(
               onPressed: () {
-                var engineId = PlatformDispatcher.instance.engineId!;
-                var viewId = _createRegularWindow(engineId);
-                var window = GtkWindow(_getGtkWindow(engineId, viewId));
+                var window = GtkWindow();
+                var view = FlView();
+                view.show();
+                window.add(view);
                 window.setTitle("Multi-Window FFI Test");
                 window.setDefaultSize(600, 600);
                 window.present();
