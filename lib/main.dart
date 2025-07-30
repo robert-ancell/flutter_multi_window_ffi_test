@@ -1,11 +1,23 @@
 import 'dart:ffi' hide Size;
+import 'dart:ui' show FlutterView;
 
 import 'package:ffi/ffi.dart' as ffi;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const MyApp());
+  runWidget(
+    MultiViewApp(
+      viewBuilder: (BuildContext context) {
+        var view = View.of(context);
+        if (view.viewId == 0) {
+          return const MyApp();
+        } else {
+          return const ChildPage();
+        }
+      },
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -19,7 +31,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Linux Multi-Window using FFI'),
     );
   }
 }
@@ -67,6 +79,15 @@ class GtkWindow extends GtkWidget {
   external static void _gtkWindowPresent(Pointer window);
   void present() {
     _gtkWindowPresent(pointer);
+  }
+
+  @Native<Void Function(Pointer, Bool)>(symbol: 'gtk_window_set_decorated')
+  external static void _gtkWindowSetDecorated(
+    Pointer container,
+    bool decorated,
+  );
+  void setDecorated(bool decorated) {
+    _gtkWindowSetDecorated(pointer, decorated);
   }
 
   @Native<Void Function(Pointer, Pointer<ffi.Utf8>)>(
@@ -152,16 +173,19 @@ class FlView extends GtkWidget {
           Pointer.fromAddress(PlatformDispatcher.instance.engineId!),
         ),
       );
+
+  @Native<Int64 Function(Pointer)>(symbol: 'fl_view_get_id')
+  external static int _flViewGetId(Pointer view);
+  int getId() {
+    return _flViewGetId(pointer);
+  }
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
-  }
+  final titleController = TextEditingController(text: "Title");
+  final widthController = TextEditingController(text: "300");
+  final heightController = TextEditingController(text: "300");
+  bool decorated = true;
 
   @override
   Widget build(BuildContext context) {
@@ -171,24 +195,160 @@ class _MyHomePageState extends State<MyHomePage> {
         title: Text(widget.title),
       ),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            OutlinedButton(
-              onPressed: () {
-                var window = GtkWindow();
-                var view = FlView();
-                view.show();
-                window.add(view);
-                window.setTitle("Multi-Window FFI Test");
-                window.setDefaultSize(600, 600);
-                window.present();
-              },
-              child: Text('CreateWindow'),
-            ),
-          ],
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              TextField(
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: "Title",
+                ),
+                controller: titleController,
+              ),
+              SizedBox(height: 10),
+              TextField(
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: "Width",
+                ),
+                keyboardType: TextInputType.number,
+                controller: widthController,
+              ),
+              SizedBox(height: 10),
+              TextField(
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: "Height",
+                ),
+                keyboardType: TextInputType.number,
+                controller: heightController,
+              ),
+              SizedBox(height: 10),
+              Row(
+                children: <Widget>[
+                  Text("Decorated"),
+                  SizedBox(width: 10),
+                  Switch(
+                    value: decorated,
+                    onChanged: (bool value) {
+                      setState(() {
+                        decorated = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              SizedBox(height: 10),
+              OutlinedButton(
+                onPressed: () {
+                  var window = GtkWindow();
+                  var view = FlView();
+                  view.show();
+                  window.add(view);
+                  window.setDecorated(decorated);
+                  window.setTitle(titleController.text);
+                  window.setDefaultSize(
+                    int.parse(widthController.text),
+                    int.parse(heightController.text),
+                  );
+                  window.present();
+                },
+                child: Text('CreateWindow'),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+}
+
+class ChildPage extends StatelessWidget {
+  const ChildPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Container(
+        color: Colors.grey,
+        child: Center(
+          child: Text(
+            'Hello World from View#${View.of(context).viewId}\n'
+            'Logical ${MediaQuery.sizeOf(context)}\n'
+            'DPR: ${MediaQuery.devicePixelRatioOf(context)}',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Calls [viewBuilder] for every view added to the app to obtain the widget to
+/// render into that view. The current view can be looked up with [View.of].
+class MultiViewApp extends StatefulWidget {
+  const MultiViewApp({super.key, required this.viewBuilder});
+
+  final WidgetBuilder viewBuilder;
+
+  @override
+  State<MultiViewApp> createState() => _MultiViewAppState();
+}
+
+class _MultiViewAppState extends State<MultiViewApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _updateViews();
+  }
+
+  @override
+  void didUpdateWidget(MultiViewApp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Need to re-evaluate the viewBuilder callback for all views.
+    _views.clear();
+    _updateViews();
+  }
+
+  @override
+  void didChangeMetrics() {
+    _updateViews();
+  }
+
+  Map<Object, Widget> _views = <Object, Widget>{};
+
+  void _updateViews() {
+    final Map<Object, Widget> newViews = <Object, Widget>{};
+    for (final FlutterView view
+        in WidgetsBinding.instance.platformDispatcher.views) {
+      final Widget viewWidget = _views[view.viewId] ?? _createViewWidget(view);
+      newViews[view.viewId] = viewWidget;
+    }
+    setState(() {
+      _views = newViews;
+    });
+  }
+
+  Widget _createViewWidget(FlutterView view) {
+    return View(
+      view: view,
+      child: Builder(builder: widget.viewBuilder),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ViewCollection(views: _views.values.toList(growable: false));
   }
 }

@@ -53,7 +53,7 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "flutter_multi_window_ffi_test");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  gtk_window_set_default_size(window, 400, 600);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_ui_thread_policy(project, FL_UI_THREAD_POLICY_RUN_ON_PLATFORM_THREAD);
